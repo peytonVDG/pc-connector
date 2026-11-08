@@ -15,10 +15,12 @@ jobs:
     name: Linux (Ubuntu 22.04+)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install build dependencies
         run: |
           sudo apt-get update
+          # The runner image ships LLVM's libunwind, which conflicts with libgstreamer1.0-dev.
+          sudo apt-get remove -y libunwind-14-dev || true
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libudev-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
             gstreamer1.0-plugins-ugly gstreamer1.0-libav
@@ -46,7 +48,7 @@ jobs:
     name: Windows (x64)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install GStreamer
         shell: pwsh
         run: ./packaging/windows/install-gstreamer.ps1
