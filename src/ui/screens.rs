@@ -648,6 +648,7 @@ pub fn overlay(ctx: &egui::Context, info: &OverlayInfo) -> Vec<OverlayAction> {
             .interactable(false)
             .show(ctx, |ui| {
                 panel.show(ui, |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                     let s = info.stats;
                     let net_color = if s.loss_pct > 1.0 {
                         BAD

@@ -155,6 +155,7 @@ impl App {
                 display_size,
             }
         };
+        self.launcher.tab = screens::Tab::Play;
         self.launcher.connecting = Some(Connecting { label: label.clone(), started: Instant::now() });
         self.launcher.notice = None;
         let proxy = self.proxy.clone();
