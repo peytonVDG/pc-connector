@@ -233,7 +233,9 @@ mod tests {
         fn key(&mut self, hid: u16, down: bool) {
             self.log.push(format!("key {hid} {down}"));
         }
-        fn mouse_move(&mut self, _: i32, _: i32) {}
+        fn mouse_move(&mut self, dx: i32, dy: i32) {
+            self.log.push(format!("move {dx} {dy}"));
+        }
         fn mouse_abs(&mut self, _: u16, _: u16) {}
         fn mouse_button(&mut self, b: u8, down: bool) {
             self.log.push(format!("btn {b} {down}"));
@@ -257,5 +259,53 @@ mod tests {
         rec.log.clear();
         held.apply(&mut rec, InputEvent::ReleaseAll);
         assert_eq!(rec.log, vec!["key 5 false"]);
+    }
+
+    /// Shares the recorded log with the test while the receiver owns the injector.
+    struct Shared(Arc<Mutex<Vec<String>>>);
+    impl Injector for Shared {
+        fn key(&mut self, hid: u16, down: bool) {
+            self.0.lock().unwrap().push(format!("key {hid} {down}"));
+        }
+        fn mouse_move(&mut self, dx: i32, dy: i32) {
+            self.0.lock().unwrap().push(format!("move {dx} {dy}"));
+        }
+        fn mouse_abs(&mut self, _: u16, _: u16) {}
+        fn mouse_button(&mut self, b: u8, down: bool) {
+            self.0.lock().unwrap().push(format!("btn {b} {down}"));
+        }
+        fn scroll(&mut self, _: i16, _: i16) {}
+        fn gamepad(&mut self, i: u8, s: GamepadState) {
+            self.0.lock().unwrap().push(format!("pad {i} {:#x}", s.buttons));
+        }
+        fn gamepad_removed(&mut self, _: u8) {}
+        fn remove_all_gamepads(&mut self) {}
+        fn set_rumble_callback(&mut self, _: Option<RumbleCallback>) {}
+    }
+
+    #[test]
+    fn udp_end_to_end() {
+        use crate::client::input::InputSender;
+        let sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let addr = sock.local_addr().unwrap();
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let injector: Arc<Mutex<Box<dyn Injector>>> = Arc::new(Mutex::new(Box::new(Shared(log.clone()))));
+        let rx = InputReceiver::start(sock, 42, addr.ip(), injector, Arc::new(|_, _, _, _| {})).unwrap();
+
+        // Packets with the wrong session token must be ignored.
+        let intruder = InputSender::new(addr, 7).unwrap();
+        intruder.send(InputEvent::Key { hid: 0x04, down: true });
+
+        let tx = InputSender::new(addr, 42).unwrap();
+        tx.send(InputEvent::Key { hid: 0x04, down: true });
+        tx.send(InputEvent::Key { hid: 0x04, down: true }); // auto-repeat: not re-sent
+        tx.send(InputEvent::MouseMove { dx: 3, dy: -2 });
+        tx.send(InputEvent::Gamepad { index: 0, state: GamepadState { buttons: 1, ..Default::default() } });
+        tx.send(InputEvent::Key { hid: 0x04, down: false });
+        tx.send(InputEvent::Key { hid: 0x05, down: true });
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        drop(rx); // session end: everything still held is released
+        let log = log.lock().unwrap().clone();
+        assert_eq!(log, vec!["key 4 true", "move 3 -2", "pad 0 0x1", "key 4 false", "key 5 true", "key 5 false"]);
     }
 }

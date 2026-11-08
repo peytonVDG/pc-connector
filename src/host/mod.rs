@@ -137,6 +137,15 @@ impl HostServer {
     fn shutdown(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
         self.shared.active_session.fetch_add(1, Ordering::SeqCst);
+        // Give a running session a moment to tear down cleanly (release held keys,
+        // restore the host's audio output) before the process may exit.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            if self.shared.session_lock.try_lock().is_ok() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
         for t in self.threads.drain(..) {
             let _ = t.join();
         }
