@@ -160,6 +160,10 @@ fn convert_chain(kind: EncKind, w: u32, h: u32) -> String {
             EncKind::Software => format!(
                 "d3d11download ! videoconvert n-threads=4 ! videoscale ! video/x-raw,format=I420,width={w},height={h}"
             ),
+            // Software Media Foundation encoders only take system memory.
+            EncKind::MediaFoundation => format!(
+                "d3d11convert ! video/x-raw(memory:D3D11Memory),format=NV12,width={w},height={h} ! d3d11download ! video/x-raw,format=NV12"
+            ),
             _ => format!("d3d11convert ! video/x-raw(memory:D3D11Memory),format=NV12,width={w},height={h}"),
         };
     }
