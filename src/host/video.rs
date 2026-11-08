@@ -92,7 +92,7 @@ pub fn working_encoders() -> &'static [EncoderInfo] {
             }
             let desc = format!(
                 "videotestsrc num-buffers=5 ! video/x-raw,format=BGRx,width=640,height=360,framerate=30/1 {upload} ! {convert} ! {element} ! fakesink",
-                upload = if cfg!(windows) && enc.kind != EncKind::Software { "! d3d11upload" } else { "" },
+                upload = if cfg!(windows) { "! d3d11upload" } else { "" }, // real capture is GPU memory on Windows
                 convert = convert_chain(enc.kind, 640, 360),
                 element = enc.element
             );
