@@ -1,0 +1,84 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux (Ubuntu 22.04+)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libudev-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-libav
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --release
+      - name: Build
+        run: cargo build --release
+      - name: Probe
+        run: ./target/release/pc-connector probe
+      - name: Package
+        run: |
+          mkdir -p dist/pc-connector-linux-x64/scripts
+          cp target/release/pc-connector dist/pc-connector-linux-x64/
+          cp scripts/install-linux.sh dist/pc-connector-linux-x64/scripts/
+          cp README.md dist/pc-connector-linux-x64/
+          tar -C dist -czf dist/pc-connector-linux-x64.tar.gz pc-connector-linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pc-connector-linux-x64
+          path: dist/pc-connector-linux-x64.tar.gz
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GStreamer
+        shell: pwsh
+        run: ./packaging/windows/install-gstreamer.ps1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        shell: pwsh
+        run: cargo test --release
+      - name: Build
+        shell: pwsh
+        run: cargo build --release
+      - name: Bundle with GStreamer runtime
+        shell: pwsh
+        run: ./packaging/windows/bundle.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PC-Connector-windows-x64
+          path: dist/PC-Connector-windows-x64
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Zip Windows folder
+        run: cd artifacts && zip -qr PC-Connector-windows-x64.zip PC-Connector-windows-x64
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/PC-Connector-windows-x64.zip
+            artifacts/pc-connector-linux-x64/pc-connector-linux-x64.tar.gz
